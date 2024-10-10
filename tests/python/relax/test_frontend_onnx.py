@@ -118,7 +118,6 @@ def check_correctness(
     tvm_model = relax.transform.DecomposeOpsForInference()(tvm_model)
     # Legalize any relax ops into tensorir.
     tvm_model = relax.transform.LegalizeOps()(tvm_model)
-    print(tvm_model)
 
     # Separate model from parameters.
     tvm_model, params = relax.frontend.detach_params(tvm_model)
@@ -358,6 +357,42 @@ def test_binary_bool(op_name: str):
     verify_binary(op_name, [32, 32], [32, 32], [32, 32], dtype=TensorProto.BOOL)
 
 
+@pytest.mark.skip(reason="opset 18 is not supported in CI")
+@pytest.mark.parametrize("op_name", ["BitwiseAnd", "BitwiseOr", "BitwiseXor"])
+def test_bitwise(op_name: str):
+    verify_binary(op_name, [32, 32], [32, 32], [32, 32], dtype=TensorProto.UINT64, opset=18)
+
+
+@pytest.mark.skip(reason="opset 18 is not supported in CI")
+def test_bitwise_not():
+    verify_unary(
+        "BitwiseNot",
+        [32, 32],
+        input_dtype=TensorProto.UINT64,
+        output_dtype=TensorProto.UINT64,
+        opset=18,
+    )
+
+
+@pytest.mark.parametrize("direction", ["LEFT", "RIGHT"])
+def test_bitwise_shift(direction: str):
+    shape = [32, 32]
+    dtype = TensorProto.UINT64
+    test_node = helper.make_node("BitShift", ["a", "b"], ["c"], direction=direction)
+    graph = helper.make_graph(
+        [test_node],
+        "binary_test",
+        inputs=[
+            helper.make_tensor_value_info("a", dtype, shape),
+            helper.make_tensor_value_info("b", dtype, shape),
+        ],
+        outputs=[helper.make_tensor_value_info("c", dtype, shape)],
+    )
+
+    model = helper.make_model(graph, producer_name="binary_test")
+    check_correctness(model, inputs={"b": np.random.randint(0, 8, shape).astype("uint64")})
+
+
 @pytest.mark.parametrize(
     "op_name",
     [
@@ -485,6 +520,38 @@ def test_scatter(axis: int, name: str, opset: int):
     model = helper.make_model(graph, producer_name="scatter_test")
     indices = np.random.randint(0, 16, indices_shape)
     check_correctness(model, inputs={"indices": indices}, opset=opset)
+
+
+@pytest.mark.parametrize("reduction", ["none", "add", "mul"])
+def test_scatter_nd(reduction):
+    def verify_scatter_nd(data_shape, indices_shape, updates_shape):
+        scatter_nd_node = helper.make_node(
+            "ScatterND",
+            ["data", "indices", "updates"],
+            ["output"],
+            reduction=reduction,
+        )
+
+        graph = helper.make_graph(
+            [scatter_nd_node],
+            "scatter_nd_test",
+            inputs=[
+                helper.make_tensor_value_info("data", TensorProto.FLOAT, data_shape),
+                helper.make_tensor_value_info("indices", TensorProto.INT64, indices_shape),
+                helper.make_tensor_value_info("updates", TensorProto.FLOAT, updates_shape),
+            ],
+            outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, data_shape)],
+        )
+
+        model = helper.make_model(graph, producer_name="scatter_nd_test")
+
+        indices = np.random.choice(data_shape[0], indices_shape)
+        check_correctness(model, inputs={"indices": indices}, opset=16)
+
+    verify_scatter_nd([8], [4, 1], [4])
+    verify_scatter_nd([4, 4, 4], [2, 1], [2, 4, 4])
+    verify_scatter_nd([4, 5, 6], [2, 3, 2], [2, 3, 6])
+    verify_scatter_nd([10], [5, 1], [5])
 
 
 def test_size():
@@ -710,6 +777,28 @@ def test_trilu(upper: bool):
     verify_unary("Trilu", [3, 5, 5], attrs={"upper": upper})
 
 
+@pytest.mark.parametrize("k_value", [-1, 0, 1])
+def test_trilu_with_const_k(k_value: int):
+    """test_trilu_with_const_k"""
+
+    input_shape = [2, 3, 3]
+
+    graph = helper.make_graph(
+        [
+            make_constant_node("k", onnx.TensorProto.INT64, [1], [k_value]),
+            helper.make_node("Trilu", inputs=["x", "k"], outputs=["y"]),
+        ],
+        "trilu_graph",
+        inputs=[
+            helper.make_tensor_value_info("x", onnx.TensorProto.DOUBLE, input_shape),
+        ],
+        outputs=[helper.make_tensor_value_info("y", onnx.TensorProto.DOUBLE, input_shape)],
+    )
+
+    model = helper.make_model(graph, producer_name="trilu_graph")
+    check_correctness(model)
+
+
 def test_selu():
     verify_unary("Selu", [3, 32, 32])
     verify_unary("Selu", [3, 32, 32], attrs={"alpha": 0.25, "gamma": 0.3})
@@ -856,6 +945,27 @@ def test_cumsum(reverse, exclusive):
     )
 
     model = helper.make_model(graph, producer_name="cumsum_test")
+    check_correctness(model)
+
+
+def test_cumsum1():
+    """test_cumsum1"""
+
+    input_shape = [2, 3]
+
+    graph = helper.make_graph(
+        [
+            helper.make_node("CumSum", inputs=["X", "axis"], outputs=["Y"]),
+        ],
+        "cumsum_graph",
+        inputs=[
+            helper.make_tensor_value_info("X", onnx.TensorProto.DOUBLE, input_shape),
+            helper.make_tensor_value_info("axis", onnx.TensorProto.INT32, [1], "axis"),
+        ],
+        outputs=[helper.make_tensor_value_info("Y", onnx.TensorProto.DOUBLE, input_shape)],
+    )
+
+    model = helper.make_model(graph, producer_name="cumsum_graph")
     check_correctness(model)
 
 
@@ -1586,6 +1696,63 @@ def test_pad(dynamic):
     verify_pad((1, 3, 4, 5), [0, 1, 1, 1, 0, 0, 1, 1], "reflect")
 
 
+@pytest.mark.parametrize("dynamic", [True, False])
+def test_pad_v2(dynamic):
+
+    if dynamic:
+        pytest.skip("Dynamic pad not supported")
+
+    def verify_pad(input_shape, pads, mode="constant", value=0.0):
+        indata = np.random.normal(size=input_shape).astype(np.float32)
+        #  numpy expect result
+        len_dim = len(pads) // 2
+        np_pads = [(pads[i], pads[i + len_dim]) for i in range(len_dim)]
+        pads = np.array(pads)
+        #  onnx graph
+        if mode in ["edge", "reflect"]:
+            outdata = np.pad(indata, pad_width=np_pads, mode=mode)
+            node = helper.make_node(
+                "Pad", inputs=["input"], outputs=["output"], mode=mode, pads=pads
+            )
+            graph = helper.make_graph(
+                [node],
+                "pad_test",
+                inputs=[
+                    helper.make_tensor_value_info("input", TensorProto.FLOAT, list(indata.shape))
+                ],
+                outputs=[
+                    helper.make_tensor_value_info("output", TensorProto.FLOAT, list(outdata.shape))
+                ],
+            )
+        else:
+            outdata = np.pad(indata, pad_width=np_pads, mode="constant", constant_values=value)
+            node = helper.make_node(
+                "Pad",
+                inputs=["input"],
+                outputs=["output"],
+                mode="constant",
+                pads=pads,
+                value=value,
+            )
+            graph = helper.make_graph(
+                [node],
+                "pad_test",
+                inputs=[
+                    helper.make_tensor_value_info("input", TensorProto.FLOAT, list(indata.shape))
+                ],
+                outputs=[
+                    helper.make_tensor_value_info("output", TensorProto.FLOAT, list(outdata.shape))
+                ],
+            )
+        model = helper.make_model(graph, producer_name="pad_test")
+        check_correctness(model=model, opset=10)
+
+    verify_pad((2, 2), [0, 1, 0, 0], "constant", 0.0)
+    verify_pad((2, 3), [1, 0, 0, 1], "constant", 0.0)
+    verify_pad((3, 2), [0, 0, 1, 0], "constant", 5.0)
+    verify_pad((1, 3, 4, 5), [0, 1, 1, 1, 0, 0, 1, 1], "reflect")
+
+
 @pytest.mark.parametrize("fp_arith", [np.float16, np.float32])
 @pytest.mark.parametrize("dynamic", [True, False])
 def test_split(fp_arith, dynamic):
@@ -2081,6 +2248,11 @@ def test_unique(axis: Optional[int], sorted: int):
     )
     model = helper.make_model(graph, producer_name="unique_test")
     check_correctness(model)
+
+
+@pytest.mark.parametrize("shape", [(), (1,), (2, 3), (4, 5, 6)])
+def test_nonzero(shape):
+    verify_unary("NonZero", shape, input_dtype=TensorProto.BOOL, output_dtype=TensorProto.INT64)
 
 
 @pytest.mark.parametrize("mode", ["DCR", "CRD"])

@@ -244,7 +244,8 @@ class BinaryBase(OnnxOpConverter):
     relax_op: Callable = None
 
     @classmethod
-    def _impl_v1(cls, bb, inputs, attr, params):
+    def base_impl(cls, bb, inputs, attr, params):
+        """Base implementation for binary operations."""
         if cls.numpy_op is None or cls.relax_op is None:
             raise ValueError("Numpy and Relax operators must be defined for BinaryBase.")
         if all([isinstance(inp, relax.Constant) for inp in inputs]):
@@ -274,12 +275,20 @@ class Add(BinaryBase):
     numpy_op = _np.add
     relax_op = relax.op.add
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class Sub(BinaryBase):
     """Converts an onnx Sub node into an equivalent Relax expression."""
 
     numpy_op = _np.subtract
     relax_op = relax.op.subtract
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Mul(BinaryBase):
@@ -288,12 +297,20 @@ class Mul(BinaryBase):
     numpy_op = _np.multiply
     relax_op = relax.op.multiply
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class Div(BinaryBase):
     """Converts an onnx Div node into an equivalent Relax expression."""
 
     numpy_op = _np.divide
     relax_op = relax.op.divide
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Pow(BinaryBase):
@@ -302,12 +319,20 @@ class Pow(BinaryBase):
     numpy_op = _np.power
     relax_op = relax.op.power
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class And(BinaryBase):
     """Converts an onnx And node into an equivalent Relax expression."""
 
     numpy_op = _np.logical_and
     relax_op = relax.op.logical_and
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Or(BinaryBase):
@@ -316,12 +341,20 @@ class Or(BinaryBase):
     numpy_op = _np.logical_or
     relax_op = relax.op.logical_or
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class Xor(BinaryBase):
     """Converts an onnx Xor node into an equivalent Relax expression."""
 
     numpy_op = _np.logical_xor
     relax_op = relax.op.logical_xor
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Less(BinaryBase):
@@ -330,12 +363,20 @@ class Less(BinaryBase):
     numpy_op = _np.less
     relax_op = relax.op.less
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class LessOrEqual(BinaryBase):
     """Converts an onnx LessEqual node into an equivalent Relax expression."""
 
     numpy_op = _np.less_equal
     relax_op = relax.op.less_equal
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Greater(BinaryBase):
@@ -344,12 +385,20 @@ class Greater(BinaryBase):
     numpy_op = _np.greater
     relax_op = relax.op.greater
 
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
 
 class GreaterOrEqual(BinaryBase):
     """Converts an onnx GreaterEqual node into an equivalent Relax expression."""
 
     numpy_op = _np.greater_equal
     relax_op = relax.op.greater_equal
+
+    @classmethod
+    def _impl_v1(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Equal(OnnxOpConverter):
@@ -374,7 +423,8 @@ class BitwiseBase(BinaryBase):
     """Converts an onnx BitwiseBase node into an equivalent Relax expression."""
 
     @classmethod
-    def base_impl(cls, bb, inputs, attr, params, py_func, relax_op):
+    def base_impl(cls, bb, inputs, attr, params):
+        """Base implementation for bitwise operations."""
         valid_types = ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]
         for num, inp in enumerate(inputs):
             if inp.struct_info.dtype not in valid_types:
@@ -382,31 +432,69 @@ class BitwiseBase(BinaryBase):
                     f"Bitwise operations expect all inputs to have integer types, "
                     f"got {inp.struct_info.dtype} for input {num}"
                 )
-        return BinaryBase.base_impl(bb, inputs, attr, params, py_func, relax_op)
+        return super().base_impl(bb, inputs, attr, params)
 
 
 class BitwiseAnd(BitwiseBase):
     """Converts an onnx BitwiseAnd node into an equivalent Relax expression."""
 
+    numpy_op = _np.bitwise_and
+    relax_op = relax.op.bitwise_and
+
     @classmethod
     def _impl_v18(cls, bb, inputs, attr, params):
-        return cls.base_impl(bb, inputs, attr, params, lambda x, y: x & y, relax.op.bitwise_and)
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class BitwiseOr(BitwiseBase):
     """Converts an onnx BitwiseOr node into an equivalent Relax expression."""
 
+    numpy_op = _np.bitwise_or
+    relax_op = relax.op.bitwise_or
+
     @classmethod
     def _impl_v18(cls, bb, inputs, attr, params):
-        return cls.base_impl(bb, inputs, attr, params, lambda x, y: x | y, relax.op.bitwise_or)
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class BitwiseXor(BitwiseBase):
     """Converts an onnx BitwiseXor node into an equivalent Relax expression."""
 
+    numpy_op = _np.bitwise_xor
+    relax_op = relax.op.bitwise_xor
+
     @classmethod
     def _impl_v18(cls, bb, inputs, attr, params):
-        return cls.base_impl(bb, inputs, attr, params, lambda x, y: x ^ y, relax.op.bitwise_xor)
+        return cls.base_impl(bb, inputs, attr, params)
+
+
+class BitwiseNot(BitwiseBase):
+    """Converts an onnx BitwiseNot node into an equivalent Relax expression."""
+
+    numpy_op = _np.bitwise_not
+    relax_op = relax.op.bitwise_not
+
+    @classmethod
+    def _impl_v18(cls, bb, inputs, attr, params):
+        return cls.base_impl(bb, inputs, attr, params)
+
+
+class BitShift(BitwiseBase):
+    """Converts an onnx BitShift node into an equivalent Relax expression."""
+
+    @classmethod
+    def _impl_v11(cls, bb, inputs, attr, params):
+        direction = attr.get("direction", "LEFT").decode("ascii")
+        if direction == "LEFT":
+            cls.numpy_op = _np.left_shift
+            cls.relax_op = relax.op.left_shift
+        elif direction == "RIGHT":
+            cls.numpy_op = _np.right_shift
+            cls.relax_op = relax.op.right_shift
+        else:
+            raise ValueError("Unsupported Shift Direction: " + direction)
+
+        return cls.base_impl(bb, inputs, attr, params)
 
 
 class Sigmoid(OnnxOpConverter):
@@ -604,6 +692,36 @@ class ScatterElements(OnnxOpConverter):
         return relax.op.scatter_elements(inputs[0], inputs[1], inputs[2], axis=axis)
 
 
+class ScatterND(OnnxOpConverter):
+    """Convert an onnx ScatterND node into an equivalent Relax expression."""
+
+    @staticmethod
+    def _reduction_check(attr, valid_reductions: List[str]):
+        reduction = attr.get("reduction", None)
+        reduction = reduction or b"update"
+        reduction = reduction.decode("utf-8")
+        reduction = "update" if reduction == "none" else reduction
+        assert (
+            reduction in valid_reductions
+        ), f"Only {valid_reductions} reductions are supported, but {reduction} is gotten"
+
+        return reduction
+
+    @classmethod
+    def _impl_v11(cls, bb, inputs, attr, params):
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2])
+
+    @classmethod
+    def _impl_v16(cls, bb, inputs, attr, params):
+        reduction = cls._reduction_check(attr, ["update", "add", "mul"])
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2], reduction)
+
+    @classmethod
+    def _impl_v18(cls, bb, inputs, attr, params):
+        reduction = cls._reduction_check(attr, ["update", "add", "mul", "min", "max"])
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2], reduction)
+
+
 class Size(OnnxOpConverter):
     """Convert an onnx Size node into an equivalent Relax expression."""
 
@@ -740,10 +858,12 @@ class Trilu(OnnxOpConverter):
         x = inputs[0]
         k = inputs[1] if len(inputs) > 1 else 0
 
-        if isinstance(k, relax.Var) and k.name_hint in params:
-            k = get_constant(k, params)
-        elif isinstance(k, relax.Constant):
-            k = int(k.data.numpy()[0])
+        if len(inputs) > 1:
+            k = get_constant(inputs[1], params)
+            if isinstance(k, relax.Constant):
+                k = int(k.data.numpy()[0])
+            else:
+                raise ValueError("Currently only support constant k for Trilu op.")
         else:
             k = 0
 
@@ -1461,6 +1581,35 @@ class Slice(OnnxOpConverter):
 
 class Pad(OnnxOpConverter):
     """Converts an onnx Pad node into an equivalent Relax expression."""
+
+    @classmethod
+    def _impl_v2(cls, bb, inputs, attr, params):
+        pads = attr.get("pads")
+        pads = relax.const(_np.array(pads), inputs[0].struct_info.shape[0].dtype)
+        constant_value = attr.get("value")
+        if constant_value is None:
+            constant_value = 0.0
+
+        if isinstance(pads, relax.Constant):
+            pad_before, pad_after = _np.split(pads.data.numpy(), 2)
+            pad_before = _np.ndarray.tolist(pad_before)
+            pad_after = _np.ndarray.tolist(pad_after)
+        else:
+            raise ValueError("Dynamic pads are not supported yet.")
+
+        pad_mode = attr.get("mode", b"constant").decode("utf-8")
+        if not pad_mode in ["constant", "edge", "reflect"]:
+            raise tvm.error.OpAttributeInvalid(
+                "Value " + pad_mode + ' in attribute "mode" is invalid for operator Pad.'
+            )
+
+        if pad_mode == "constant":
+            return bb.emit_te(topi.nn.pad, inputs[0], pad_before, pad_after, constant_value)
+        elif pad_mode == "reflect":
+            return bb.emit_te(topi.nn.mirror_pad, inputs[0], pad_before, pad_after, "REFLECT")
+        else:
+            # TODO(gigiblender) Support edge mode.
+            raise NotImplementedError("Pad mode {} not implemented".format(pad_mode))
 
     @classmethod
     def _impl_v11(cls, bb, inputs, attr, params):
@@ -2392,6 +2541,14 @@ class Unique(OnnxOpConverter):
         return relax.op.unique(data, sorted=sorted, axis=axis)
 
 
+class NonZero(OnnxOpConverter):
+    """Converts an onnx NonZero node into an equivalent Relax expression."""
+
+    @classmethod
+    def _impl_v9(cls, bb, inputs, attr, params):
+        return relax.op.nonzero(inputs[0])
+
+
 class HardSigmoid(OnnxOpConverter):
     """Converts an onnx HardSigmoid node into an equivalent Relax expression."""
 
@@ -2652,8 +2809,8 @@ def _get_convert_map():
         "BitwiseAnd": BitwiseAnd,
         "BitwiseOr": BitwiseOr,
         "BitwiseXor": BitwiseXor,
-        # "BitwiseNot": BitwiseNot,
-        # "BitwiseShift": BitwiseShift,
+        "BitwiseNot": BitwiseNot,
+        "BitShift": BitShift,
         "And": And,
         "Or": Or,
         "Xor": Xor,
@@ -2729,7 +2886,7 @@ def _get_convert_map():
         # "GatherND": GatherND,
         "Scatter": Scatter,
         "ScatterElements": ScatterElements,
-        # "ScatterND": ScatterND,
+        "ScatterND": ScatterND,
         # "Compress": Compress,
         "Size": Size,
         # "EyeLike": EyeLike,
@@ -2777,7 +2934,7 @@ def _get_convert_map():
         "Range": Range,
         "OneHot": OneHot,
         "Unique": Unique,
-        # "NonZero": NonZero,
+        "NonZero": NonZero,
         # "If": If,
         # "LRN": LRN,
         # "MaxRoiPool": MaxRoiPool,
